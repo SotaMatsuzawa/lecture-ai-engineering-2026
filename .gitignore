@@ -12,3 +12,9 @@ learning_log/
 
 # macOS
 .DS_Store
+
+# 講義資料（配布PDF）は再配布しない
+lectures/*/materials/
+
+# ADK（adk run / adk web）がエージェントごとに作るセッションDB
+.adk/
