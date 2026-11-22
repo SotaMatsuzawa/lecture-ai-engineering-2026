@@ -54,3 +54,17 @@ def test_existing_index_survives_failed_rebuild(materials):
         build_index(source, database, rebuild=True, embedder=embed)
     assert database.read_bytes() == before
     assert not list(database.parent.glob(".rag-build-*"))
+
+
+def test_rank_structured_puts_title_match_first():
+    """宿題（発展）: タイトル一致のページは、距離が遠くても先に並ぶ。"""
+    from app.retrieval import rank_structured
+
+    rows = [
+        {"page_id": "a", "title": "アジェンダ", "distance": 0.1},
+        {"page_id": "b", "title": "まとめ", "distance": 0.5},
+        {"page_id": "c", "title": "Part 3 ループ", "distance": 0.2},
+    ]
+    ranked = rank_structured(rows, "まとめ", top_k=2)
+    assert [r["page_id"] for r in ranked] == ["b", "a"]
+    assert [r["page_id"] for r in rank_structured(rows, None, top_k=3)] == ["a", "c", "b"]

@@ -138,6 +138,36 @@ def search(query: str) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def rank_structured(rows: list[dict], title_keyword: str | None, top_k: int) -> list[dict]:
+    """宿題（発展）: タイトルに title_keyword を含むページを先に、残りを距離の近い順に並べる。"""
+    keyword = (title_keyword or "").strip()
+    for row in rows:
+        row["title_match"] = bool(keyword) and keyword in row["title"]
+    return sorted(rows, key=lambda row: (not row["title_match"], row["distance"], row["page_id"]))[:top_k]
+
+
+def search_structured(query: str, lecture: int | None = None, title_keyword: str | None = None) -> list[dict]:
+    """宿題（発展）: 回で絞り込み、タイトル照合を優先してから、ベクトルの近さで最大RAG_TOP_K件返す。
+
+    ベクトル検索は「内容が近いページ」は探せるが、「まとめ」「クイズ」のような
+    ページの役割では探しにくい。Tree が持つ構造（回・ページタイトル）を条件に足す。
+    """
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("検索語が空です。")
+    if lecture is not None and lecture not in {int(d[3:5]) for d in RAG_DOCUMENT_IDS}:
+        raise ValueError(f"第{lecture}回は検索対象にありません。")
+    with open_index(RAG_DB) as db:
+        vector = embed_text(query.strip(), "RETRIEVAL_QUERY")
+        where = "WHERE lecture = ?" if lecture is not None else ""
+        params = (sqlite_vec.serialize_float32(vector),) + ((lecture,) if lecture is not None else ())
+        rows = db.execute(f"""
+            SELECT page_id, document_id, lecture, document_title, section, title, page, content,
+                   vec_distance_cosine(embedding, ?) AS distance
+            FROM chunks {where}
+        """, params)
+        return rank_structured([dict(row) for row in rows], title_keyword, RAG_TOP_K)
+
+
 def search_graph(query: str) -> dict:
     """ベクトル検索を入口に、前後ページと共通用語で候補を広げる。"""
     pages = {page["page_id"]: page for page in load_pages(RAG_SOURCE)}
